@@ -1,0 +1,50 @@
+# BRO予約システム開発ルール
+
+## プロジェクト概要
+ボーイ（スタッフ）とお客様をつなぐ予約管理システム。
+MVP段階での実装を優先。
+
+## 必読ドキュメント
+- docs/01_requirement.md：要件定義
+- docs/02_userflow.md：画面遷移
+- docs/03_domain_model.md：データ構造
+- docs/04_future_ideas.md：将来実装（今は不要）
+
+## 技術スタック
+- Next.js 16 (App Router)
+- TypeScript (strict mode)
+- Supabase (Database)
+- Tailwind CSS v4
+
+## コーディング規約
+### 言語
+- コード：英語（変数名、関数名、コメント）
+- UIテキスト：日本語
+- 説明：日本語
+
+### ファイル構成
+- page.tsx は薄く保つ
+- ロジックは責務ごとに分離
+- Client/Server Componentを明確に区別
+
+### 命名規則
+- Component: PascalCase
+- Function: camelCase
+- File: PascalCase (コンポーネント), camelCase (ユーティリティ)
+
+### Supabase
+- Client作成は utils/supabase.ts を使用
+- 直接 createClient しない
+
+## 実装方針
+1. docsの定義から外れない
+2. MVP範囲外の機能は実装しない
+3. 迷ったらdocsに立ち戻る
+
+## AI応答ルール（重要）
+- **必ず日本語で応答する**（説明、エラー、提案すべて）
+- コード生成時は説明を日本語で添える
+- エラー解説も日本語で行う
+- 実装判断の理由を明示する
+- コードのコメントと変数名は英語で書く
+- UIに表示するテキストは日本語で書く

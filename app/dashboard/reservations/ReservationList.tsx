@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/utils/supabaseClient";
+import { supabase } from "@/utils/supabase";
+import Link from "next/link";
 
 type Reservation = {
   id: string;
@@ -10,7 +11,9 @@ type Reservation = {
   time: string;
   name: string;
   tel: string;
-  course: string;
+  email: string;
+  course: number;
+  note?: string;
   status: "pending" | "approved" | "canceled";
 };
 
@@ -20,7 +23,6 @@ export default function ReservationList() {
   const [showPendingOnly, setShowPendingOnly] = useState(false);
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
 
-  /** データ取得 */
   const loadReservations = async () => {
     setLoading(true);
     const { data } = await supabase
@@ -36,25 +38,20 @@ export default function ReservationList() {
     loadReservations();
   }, []);
 
-  /** 承認 */
   const approveReservation = async (id: string) => {
     await supabase
       .from("reservations")
       .update({ status: "approved" })
       .eq("id", id);
-
     loadReservations();
   };
 
-  /** キャンセル */
   const cancelReservation = async (id: string) => {
     if (!confirm("この予約をキャンセルしますか？")) return;
-
     await supabase
       .from("reservations")
       .update({ status: "canceled" })
       .eq("id", id);
-
     loadReservations();
   };
 
@@ -63,20 +60,30 @@ export default function ReservationList() {
     : reservations;
 
   return (
-    <main className="min-h-screen bg-[#F7F7F9] p-5">
-      <div className="max-w-4xl mx-auto">
-        {/* ヘッダー */}
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <h1 className="text-xl font-bold text-[#111827]">予約一覧</h1>
+    <main className="min-h-screen bg-navy relative">
+      <div className="absolute inset-0 bg-gradient-to-br from-navy via-charcoal to-navy opacity-90" />
 
-          <div className="flex gap-2">
+      <div className="relative z-10 max-w-6xl mx-auto p-6 py-12">
+        {/* Header */}
+        <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <h1 className="text-4xl font-heading text-beige tracking-wider">RESERVATIONS</h1>
+            <Link 
+              href="/"
+              className="text-beige/60 hover:text-beige transition text-sm"
+            >
+              ← HOME
+            </Link>
+          </div>
+
+          <div className="flex gap-3">
             <button
               onClick={() => setShowPendingOnly((v) => !v)}
-              className={`px-3 py-1.5 text-sm rounded-full border
+              className={`px-5 py-2 text-sm rounded-lg border-2 transition-all font-bold
                 ${
                   showPendingOnly
-                    ? "bg-[#D9A441] text-black border-[#D9A441]"
-                    : "bg-white text-gray-700 border-gray-300"
+                    ? "bg-bronze text-navy border-bronze scale-105"
+                    : "bg-navy/50 text-beige/60 border-beige/20 hover:border-bronze/50"
                 }`}
             >
               未承認のみ
@@ -84,11 +91,11 @@ export default function ReservationList() {
 
             <button
               onClick={() => setViewMode("card")}
-              className={`px-3 py-1.5 text-sm rounded-lg border
+              className={`px-5 py-2 text-sm rounded-lg border-2 transition-all font-bold
                 ${
                   viewMode === "card"
-                    ? "bg-[#111827] text-white"
-                    : "bg-white text-gray-700 border-gray-300"
+                    ? "bg-beige text-navy border-beige"
+                    : "bg-navy/50 text-beige/60 border-beige/20 hover:border-beige/50"
                 }`}
             >
               カード
@@ -96,11 +103,11 @@ export default function ReservationList() {
 
             <button
               onClick={() => setViewMode("list")}
-              className={`px-3 py-1.5 text-sm rounded-lg border
+              className={`px-5 py-2 text-sm rounded-lg border-2 transition-all font-bold
                 ${
                   viewMode === "list"
-                    ? "bg-[#111827] text-white"
-                    : "bg-white text-gray-700 border-gray-300"
+                    ? "bg-beige text-navy border-beige"
+                    : "bg-navy/50 text-beige/60 border-beige/20 hover:border-beige/50"
                 }`}
             >
               リスト
@@ -109,39 +116,39 @@ export default function ReservationList() {
         </div>
 
         {loading && (
-          <p className="text-center text-gray-600 py-10">読み込み中...</p>
+          <div className="text-center text-beige/60 py-20">
+            <p className="text-lg">読み込み中...</p>
+          </div>
         )}
 
-        {/* ========== カードUI ========== */}
+        {/* Card View */}
         {!loading && viewMode === "card" && (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {filteredReservations.map((r) => (
               <div
                 key={r.id}
-                className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4"
+                className="bg-charcoal/50 rounded-xl border border-bronze/20 p-6 backdrop-blur
+                  hover:border-bronze/40 transition-all"
               >
-                {/* 上段 */}
-                <div className="flex justify-between items-start mb-2">
+                {/* Header */}
+                <div className="flex justify-between items-start mb-4">
                   <div>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-xs text-beige/50 tracking-wide mb-1">
                       {r.date} {r.time}
                     </p>
-                    <p className="text-lg font-semibold text-[#111827]">
+                    <p className="text-xl font-heading text-beige tracking-wide">
                       {r.staff}
                     </p>
-                    <p className="text-sm text-gray-700">{r.name}</p>
-                    <p className="text-sm text-gray-700">{r.tel}</p>
-                    <p className="text-sm text-gray-700">{r.course}</p>
                   </div>
 
                   <span
-                    className={`px-3 py-1 text-xs rounded-full font-semibold
+                    className={`px-3 py-1 text-xs rounded-lg font-bold
                       ${
                         r.status === "approved"
-                          ? "bg-green-100 text-green-700"
+                          ? "bg-green-500/20 text-green-300 border border-green-500/30"
                           : r.status === "pending"
-                          ? "bg-yellow-100 text-yellow-700"
-                          : "bg-gray-200 text-gray-600"
+                          ? "bg-bronze/20 text-bronze border border-bronze/30"
+                          : "bg-gray-500/20 text-gray-400 border border-gray-500/30"
                       }`}
                   >
                     {r.status === "approved"
@@ -152,16 +159,29 @@ export default function ReservationList() {
                   </span>
                 </div>
 
-                {/* ボタン */}
-                <div className="flex gap-3 mt-3">
+                {/* Details */}
+                <div className="space-y-2 mb-4 text-beige/80 text-sm">
+                  <p><span className="text-beige/50">名前:</span> {r.name}</p>
+                  <p><span className="text-beige/50">電話:</span> {r.tel}</p>
+                  <p><span className="text-beige/50">メール:</span> {r.email}</p>
+                  <p><span className="text-beige/50">コース:</span> {r.course}分</p>
+                  {r.note && (
+                    <p className="text-xs text-beige/60 mt-2 p-2 bg-navy/30 rounded">
+                      {r.note}
+                    </p>
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3">
                   <button
                     disabled={r.status !== "pending"}
                     onClick={() => approveReservation(r.id)}
-                    className={`flex-1 py-2 rounded-xl font-semibold transition
+                    className={`flex-1 py-3 rounded-lg font-bold transition-all
                       ${
                         r.status === "pending"
-                          ? "bg-[#D9A441] text-black"
-                          : "bg-gray-100 text-gray-500"
+                          ? "bg-beige text-navy hover:bg-bronze hover:scale-105"
+                          : "bg-navy/30 text-beige/30 cursor-not-allowed"
                       }`}
                   >
                     承認
@@ -169,7 +189,8 @@ export default function ReservationList() {
 
                   <button
                     onClick={() => cancelReservation(r.id)}
-                    className="flex-1 py-2 rounded-xl border border-gray-300 text-gray-700 font-semibold"
+                    className="flex-1 py-3 rounded-lg border-2 border-beige/20 text-beige/80 
+                      font-bold hover:border-bronze/50 hover:text-beige transition-all"
                   >
                     キャンセル
                   </button>
@@ -179,15 +200,16 @@ export default function ReservationList() {
           </div>
         )}
 
-        {/* ========== リストUI（PC向け） ========== */}
+        {/* List View */}
         {!loading && viewMode === "list" && (
-          <div className="overflow-x-auto bg-white rounded-2xl border border-gray-200">
-            <table className="w-full text-sm text-[#111827]">
-              <thead className="bg-gray-100 text-gray-800 font-semibold">
+          <div className="overflow-x-auto bg-charcoal/50 rounded-xl border border-bronze/20">
+            <table className="w-full text-sm">
+              <thead className="bg-navy/50 text-beige/80 font-bold border-b border-bronze/20">
                 <tr>
                   <th className="py-4 px-4 text-left">日時</th>
                   <th className="py-4 px-4 text-left">スタッフ</th>
                   <th className="py-4 px-4 text-left">名前</th>
+                  <th className="py-4 px-4 text-left">連絡先</th>
                   <th className="py-4 px-4 text-left">コース</th>
                   <th className="py-4 px-4 text-left">状態</th>
                   <th className="py-4 px-4 text-right">操作</th>
@@ -198,25 +220,29 @@ export default function ReservationList() {
                 {filteredReservations.map((r) => (
                   <tr
                     key={r.id}
-                    className="border-t hover:bg-[#FAF7F0] transition"
+                    className="border-b border-bronze/10 hover:bg-navy/30 transition text-beige/80"
                   >
-                    <td className="py-4 px-4 font-medium">
-                      {r.date} {r.time}
+                    <td className="py-4 px-4 font-medium whitespace-nowrap">
+                      {r.date}<br/>
+                      <span className="text-xs text-beige/50">{r.time}</span>
                     </td>
-                    <td className="py-4 px-4">{r.staff}</td>
+                    <td className="py-4 px-4 font-heading text-beige">{r.staff}</td>
                     <td className="py-4 px-4">{r.name}</td>
-                    <td className="py-4 px-4 text-gray-700">{r.course}</td>
-
+                    <td className="py-4 px-4 text-xs">
+                      {r.tel}<br/>
+                      <span className="text-beige/50">{r.email}</span>
+                    </td>
+                    <td className="py-4 px-4">{r.course}分</td>
                     <td className="py-4 px-4">
                       <span
-                        className={`inline-block text-xs font-semibold px-3 py-1 rounded-full
-                  ${
-                    r.status === "approved"
-                      ? "bg-[#E6F8EC] text-[#166534]"
-                      : r.status === "pending"
-                      ? "bg-[#FFF3D6] text-[#8A5B00]"
-                      : "bg-gray-200 text-gray-600"
-                  }`}
+                        className={`inline-block text-xs font-bold px-3 py-1 rounded-lg
+                          ${
+                            r.status === "approved"
+                              ? "bg-green-500/20 text-green-300"
+                              : r.status === "pending"
+                              ? "bg-bronze/20 text-bronze"
+                              : "bg-gray-500/20 text-gray-400"
+                          }`}
                       >
                         {r.status === "approved"
                           ? "承認済み"
@@ -225,18 +251,22 @@ export default function ReservationList() {
                           : "キャンセル"}
                       </span>
                     </td>
-
                     <td className="py-4 px-4 text-right whitespace-nowrap">
                       <button
                         disabled={r.status !== "pending"}
                         onClick={() => approveReservation(r.id)}
-                        className="text-[#D9A441] font-semibold mr-4 disabled:text-gray-400"
+                        className={`font-bold mr-4 transition
+                          ${
+                            r.status === "pending"
+                              ? "text-bronze hover:text-beige"
+                              : "text-beige/20 cursor-not-allowed"
+                          }`}
                       >
                         承認
                       </button>
                       <button
                         onClick={() => cancelReservation(r.id)}
-                        className="text-gray-700 hover:text-black"
+                        className="text-beige/60 hover:text-beige transition font-bold"
                       >
                         キャンセル
                       </button>
@@ -245,6 +275,12 @@ export default function ReservationList() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {!loading && filteredReservations.length === 0 && (
+          <div className="text-center py-20">
+            <p className="text-beige/40 text-lg">予約がありません</p>
           </div>
         )}
       </div>
