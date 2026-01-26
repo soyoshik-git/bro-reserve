@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/utils/supabase";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 type Reservation = {
@@ -18,10 +19,28 @@ type Reservation = {
 };
 
 export default function ReservationList() {
+  const router = useRouter();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [showPendingOnly, setShowPendingOnly] = useState(false);
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
+  // 認証チェック
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        router.push("/login");
+        return;
+      }
+      
+      setIsCheckingAuth(false);
+    };
+
+    checkAuth();
+  }, [router]);
 
   const loadReservations = async () => {
     setLoading(true);
@@ -35,8 +54,10 @@ export default function ReservationList() {
   };
 
   useEffect(() => {
-    loadReservations();
-  }, []);
+    if (!isCheckingAuth) {
+      loadReservations();
+    }
+  }, [isCheckingAuth]);
 
   const approveReservation = async (id: string) => {
     await supabase
@@ -55,9 +76,23 @@ export default function ReservationList() {
     loadReservations();
   };
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
+
   const filteredReservations = showPendingOnly
     ? reservations.filter((r) => r.status === "pending")
     : reservations;
+
+  // 認証チェック中
+  if (isCheckingAuth) {
+    return (
+      <main className="min-h-screen bg-navy flex items-center justify-center">
+        <div className="text-beige/60 text-lg">認証確認中...</div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-navy relative">
@@ -76,7 +111,7 @@ export default function ReservationList() {
             </Link>
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex gap-3 items-center flex-wrap">
             <button
               onClick={() => setShowPendingOnly((v) => !v)}
               className={`px-5 py-2 text-sm rounded-lg border-2 transition-all font-bold
@@ -111,6 +146,14 @@ export default function ReservationList() {
                 }`}
             >
               リスト
+            </button>
+
+            <button
+              onClick={handleLogout}
+              className="px-5 py-2 text-sm rounded-lg border-2 border-red-500/30 text-red-300
+                hover:bg-red-500/20 hover:border-red-500/50 transition-all font-bold"
+            >
+              ログアウト
             </button>
           </div>
         </div>
