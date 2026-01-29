@@ -27,26 +27,58 @@ export default function ReserveFormPage() {
 
     setIsSubmitting(true);
 
-    const { error } = await supabase.from("reservations").insert({
-      staff,
-      date,
-      time,
-      name,
-      tel,
-      email,
-      course: parseInt(course),
-      note,
-      status: "pending",
-    });
+    try {
+      // 重複チェック
+      const { data: conflictData, error: conflictError } = await supabase.rpc(
+        'check_reservation_conflict',
+        {
+          p_staff: staff,
+          p_date: date,
+          p_time: time,
+          p_course: parseInt(course),
+          p_exclude_id: null
+        }
+      );
 
-    if (error) {
-      console.error("予約登録エラー:", error);
-      alert("予約登録に失敗しました");
+      if (conflictError) {
+        console.error("重複チェックエラー:", conflictError);
+        alert("予約の確認中にエラーが発生しました");
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (conflictData === true) {
+        alert("申し訳ございません。この時間帯は既に予約が入っています。別の時間帯をお選びください。");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // 予約登録
+      const { error } = await supabase.from("reservations").insert({
+        staff,
+        date,
+        time,
+        name,
+        tel,
+        email,
+        course: parseInt(course),
+        note,
+        status: "pending",
+      });
+
+      if (error) {
+        console.error("予約登録エラー:", error);
+        alert("予約登録に失敗しました");
+        setIsSubmitting(false);
+        return;
+      }
+
+      window.location.href = "/reserve/complete";
+    } catch (err) {
+      console.error("予期しないエラー:", err);
+      alert("予約処理中にエラーが発生しました");
       setIsSubmitting(false);
-      return;
     }
-
-    window.location.href = "/reserve/complete";
   };
 
   return (
@@ -178,7 +210,7 @@ export default function ReserveFormPage() {
                 : "bg-beige text-navy shadow-2xl hover:bg-bronze hover:scale-105 border-2 border-bronze/20"
             }`}
         >
-          {isSubmitting ? "送信中..." : "この内容で予約問い合わせを送信"}
+          {isSubmitting ? "確認中..." : "この内容で予約問い合わせを送信"}
         </button>
 
         <p className="text-xs text-beige/40 text-center mt-4">

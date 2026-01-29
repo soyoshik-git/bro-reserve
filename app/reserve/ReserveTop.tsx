@@ -2,7 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/utils/supabase";
 import Link from "next/link";
+
+type ApprovedReservation = {
+  time: string;
+  course: number;
+};
 
 export default function ReserveTop() {
   const router = useRouter();
@@ -12,6 +18,9 @@ export default function ReserveTop() {
   const [dates, setDates] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
+  const [selectedCourse, setSelectedCourse] = useState(60);
+  const [approvedReservations, setApprovedReservations] = useState<ApprovedReservation[]>([]);
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
 
   useEffect(() => {
     const today = new Date();
@@ -24,10 +33,60 @@ export default function ReserveTop() {
     setSelectedDate(days[0]);
   }, []);
 
-  const slots = Array.from({ length: (23 - 10) * 2 }, (_, i) => {
+  useEffect(() => {
+    if (selectedStaff && selectedDate) {
+      loadApprovedReservations();
+    }
+  }, [selectedStaff, selectedDate]);
+
+  const loadApprovedReservations = async () => {
+    setIsLoadingSlots(true);
+    const { data, error } = await supabase
+      .from("reservations")
+      .select("time, course")
+      .eq("staff", selectedStaff)
+      .eq("date", selectedDate)
+      .eq("status", "approved");
+
+    if (error) {
+      console.error("予約取得エラー:", error);
+    }
+
+    setApprovedReservations((data as ApprovedReservation[]) || []);
+    setIsLoadingSlots(false);
+  };
+
+  const parseTime = (timeStr: string): number => {
+    const timePart = timeStr.split(":").slice(0, 2);
+    const [hours, minutes] = timePart.map(Number);
+    return hours * 60 + minutes;
+  };
+
+  const isTimeConflict = (slotTime: string): boolean => {
+    const slotStart = parseTime(slotTime);
+    const slotEnd = slotStart + selectedCourse;
+
+    const hasConflict = approvedReservations.some((reservation) => {
+      const resStart = parseTime(reservation.time);
+      const resCourse = Number(reservation.course);
+      const resEnd = resStart + resCourse;
+
+      // 重複判定を修正：区間が重なる場合のみtrue
+      // [slotStart, slotEnd) と [resStart, resEnd) が重なるか
+      const conflict = slotStart < resEnd && slotEnd > resStart;
+
+      return conflict;
+    });
+
+    return hasConflict;
+  };
+
+  const allSlots = Array.from({ length: (23 - 10) * 2 }, (_, i) => {
     const hour = 10 + Math.floor(i / 2);
     return `${hour}:${i % 2 === 0 ? "00" : "30"}`;
   });
+
+  const availableSlots = allSlots.filter((slot) => !isTimeConflict(slot));
 
   return (
     <main className="min-h-screen bg-navy relative">
@@ -51,7 +110,10 @@ export default function ReserveTop() {
             </label>
             <select
               value={selectedStaff}
-              onChange={(e) => setSelectedStaff(e.target.value)}
+              onChange={(e) => {
+                setSelectedStaff(e.target.value);
+                setSelectedTime("");
+              }}
               className="w-full bg-navy/50 text-beige border border-beige/20 p-4 rounded-lg 
                 focus:outline-none focus:ring-2 focus:ring-bronze transition"
             >
@@ -75,7 +137,10 @@ export default function ReserveTop() {
                 return (
                   <button
                     key={date}
-                    onClick={() => setSelectedDate(date)}
+                    onClick={() => {
+                      setSelectedDate(date);
+                      setSelectedTime("");
+                    }}
                     className={`px-5 py-3 rounded-lg whitespace-nowrap border-2 transition-all
                       ${
                         selected
@@ -92,28 +157,60 @@ export default function ReserveTop() {
           </div>
 
           <div className="bg-charcoal/50 border border-bronze/20 rounded-xl p-6 backdrop-blur">
+            <label className="block text-sm font-bold text-beige/80 mb-3 tracking-wide">
+              COURSE
+            </label>
+            <select
+              value={selectedCourse}
+              onChange={(e) => {
+                setSelectedCourse(Number(e.target.value));
+                setSelectedTime("");
+              }}
+              className="w-full bg-navy/50 text-beige border border-beige/20 p-4 rounded-lg 
+                focus:outline-none focus:ring-2 focus:ring-bronze transition"
+            >
+              <option value={60}>60分</option>
+              <option value={90}>90分</option>
+              <option value={120}>120分</option>
+              <option value={180}>180分</option>
+            </select>
+          </div>
+
+          <div className="bg-charcoal/50 border border-bronze/20 rounded-xl p-6 backdrop-blur">
             <p className="text-sm font-bold text-beige/80 mb-4 tracking-wide">
               TIME
             </p>
-            <div className="grid grid-cols-4 gap-3">
-              {slots.map((time) => {
-                const selected = selectedTime === time;
-                return (
-                  <button
-                    key={time}
-                    onClick={() => setSelectedTime(time)}
-                    className={`py-3 rounded-lg text-sm border-2 transition-all font-medium
-                      ${
-                        selected
-                          ? "bg-bronze text-navy border-bronze font-bold scale-105 shadow-lg shadow-bronze/30"
-                          : "bg-navy/50 text-beige/60 border-beige/20 hover:border-bronze/50 hover:text-beige"
-                      }`}
-                  >
-                    {time}
-                  </button>
-                );
-              })}
-            </div>
+
+            {isLoadingSlots ? (
+              <div className="text-center text-beige/60 py-8">
+                <p className="text-sm">空き状況を確認中...</p>
+              </div>
+            ) : availableSlots.length === 0 ? (
+              <div className="text-center text-beige/60 py-8">
+                <p className="text-sm">この日は予約が埋まっています</p>
+                <p className="text-xs mt-2">別の日付をお選びください</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-4 gap-3">
+                {availableSlots.map((time) => {
+                  const selected = selectedTime === time;
+                  return (
+                    <button
+                      key={time}
+                      onClick={() => setSelectedTime(time)}
+                      className={`py-3 rounded-lg text-sm border-2 transition-all font-medium
+                        ${
+                          selected
+                            ? "bg-bronze text-navy border-bronze font-bold scale-105 shadow-lg shadow-bronze/30"
+                            : "bg-navy/50 text-beige/60 border-beige/20 hover:border-bronze/50 hover:text-beige"
+                        }`}
+                    >
+                      {time}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <button

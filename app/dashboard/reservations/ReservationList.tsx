@@ -26,7 +26,6 @@ export default function ReservationList() {
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
-  // 認証チェック
   useEffect(() => {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -59,12 +58,43 @@ export default function ReservationList() {
     }
   }, [isCheckingAuth]);
 
-  const approveReservation = async (id: string) => {
-    await supabase
-      .from("reservations")
-      .update({ status: "approved" })
-      .eq("id", id);
-    loadReservations();
+  const approveReservation = async (reservation: Reservation) => {
+    try {
+      // 重複チェック
+      const { data: conflictCheck, error: conflictError } = await supabase.rpc(
+        'check_reservation_conflict',
+        {
+          p_staff: reservation.staff,
+          p_date: reservation.date,
+          p_time: reservation.time,
+          p_course: reservation.course,
+          p_exclude_id: reservation.id
+        }
+      );
+
+      if (conflictError) {
+        console.error("重複チェックエラー:", conflictError);
+        alert("予約確認中にエラーが発生しました");
+        return;
+      }
+
+      if (conflictCheck === true) {
+        alert("この時間帯は既に承認済みの予約があります。承認できません。");
+        return;
+      }
+
+      // 承認処理
+      await supabase
+        .from("reservations")
+        .update({ status: "approved" })
+        .eq("id", reservation.id);
+      
+      loadReservations();
+      alert("予約を承認しました");
+    } catch (err) {
+      console.error("予期しないエラー:", err);
+      alert("承認処理中にエラーが発生しました");
+    }
   };
 
   const cancelReservation = async (id: string) => {
@@ -85,7 +115,6 @@ export default function ReservationList() {
     ? reservations.filter((r) => r.status === "pending")
     : reservations;
 
-  // 認証チェック中
   if (isCheckingAuth) {
     return (
       <main className="min-h-screen bg-navy flex items-center justify-center">
@@ -99,7 +128,6 @@ export default function ReservationList() {
       <div className="absolute inset-0 bg-gradient-to-br from-navy via-charcoal to-navy opacity-90" />
 
       <div className="relative z-10 max-w-6xl mx-auto p-6 py-12">
-        {/* Header */}
         <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <h1 className="text-4xl font-heading text-beige tracking-wider">RESERVATIONS</h1>
@@ -164,7 +192,6 @@ export default function ReservationList() {
           </div>
         )}
 
-        {/* Card View */}
         {!loading && viewMode === "card" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {filteredReservations.map((r) => (
@@ -173,7 +200,6 @@ export default function ReservationList() {
                 className="bg-charcoal/50 rounded-xl border border-bronze/20 p-6 backdrop-blur
                   hover:border-bronze/40 transition-all"
               >
-                {/* Header */}
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <p className="text-xs text-beige/50 tracking-wide mb-1">
@@ -202,7 +228,6 @@ export default function ReservationList() {
                   </span>
                 </div>
 
-                {/* Details */}
                 <div className="space-y-2 mb-4 text-beige/80 text-sm">
                   <p><span className="text-beige/50">名前:</span> {r.name}</p>
                   <p><span className="text-beige/50">電話:</span> {r.tel}</p>
@@ -215,11 +240,10 @@ export default function ReservationList() {
                   )}
                 </div>
 
-                {/* Actions */}
                 <div className="flex gap-3">
                   <button
                     disabled={r.status !== "pending"}
-                    onClick={() => approveReservation(r.id)}
+                    onClick={() => approveReservation(r)}
                     className={`flex-1 py-3 rounded-lg font-bold transition-all
                       ${
                         r.status === "pending"
@@ -243,7 +267,6 @@ export default function ReservationList() {
           </div>
         )}
 
-        {/* List View */}
         {!loading && viewMode === "list" && (
           <div className="overflow-x-auto bg-charcoal/50 rounded-xl border border-bronze/20">
             <table className="w-full text-sm">
@@ -297,7 +320,7 @@ export default function ReservationList() {
                     <td className="py-4 px-4 text-right whitespace-nowrap">
                       <button
                         disabled={r.status !== "pending"}
-                        onClick={() => approveReservation(r.id)}
+                        onClick={() => approveReservation(r)}
                         className={`font-bold mr-4 transition
                           ${
                             r.status === "pending"
