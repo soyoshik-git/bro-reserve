@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/utils/supabase";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 type Schedule = {
@@ -27,12 +26,10 @@ type Exception = {
 const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 
 export default function SchedulePage() {
-  const router = useRouter();
   const [currentStaff, setCurrentStaff] = useState<string>("");
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [exceptions, setExceptions] = useState<Exception[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   // 編集中の曜日
   const [editingDay, setEditingDay] = useState<number | null>(null);
@@ -49,26 +46,21 @@ export default function SchedulePage() {
   const [exceptionNote, setExceptionNote] = useState("");
 
   useEffect(() => {
-    const checkAuth = async () => {
+    const fetchStaff = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        router.push("/login");
-        return;
-      }
+      if (!session) return;
 
       // 仮: メールアドレスからスタッフ名を取得（本来はusersテーブルなどで管理）
       // 例: koshi@example.com → Koshi
       const email = session.user.email || "";
       const staff = email.split("@")[0];
       const staffName = staff.charAt(0).toUpperCase() + staff.slice(1);
-      
+
       setCurrentStaff(staffName);
-      setIsCheckingAuth(false);
     };
 
-    checkAuth();
-  }, [router]);
+    fetchStaff();
+  }, []);
 
   const loadSchedules = async () => {
     if (!currentStaff) return;
@@ -92,10 +84,10 @@ export default function SchedulePage() {
   };
 
   useEffect(() => {
-    if (!isCheckingAuth && currentStaff) {
+    if (currentStaff) {
       loadSchedules();
     }
-  }, [isCheckingAuth, currentStaff]);
+  }, [currentStaff]);
 
   const handleEditDay = (dayOfWeek: number) => {
     const schedule = schedules.find((s) => s.day_of_week === dayOfWeek);
@@ -154,14 +146,6 @@ export default function SchedulePage() {
     await supabase.from("staff_exceptions").delete().eq("id", id);
     loadSchedules();
   };
-
-  if (isCheckingAuth) {
-    return (
-      <main className="min-h-screen bg-navy flex items-center justify-center">
-        <div className="text-beige/60 text-lg">認証確認中...</div>
-      </main>
-    );
-  }
 
   return (
     <main className="min-h-screen bg-navy relative">
