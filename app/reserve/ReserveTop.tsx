@@ -10,6 +10,26 @@ type ApprovedReservation = {
   course: number;
 };
 
+type StaffSchedule = {
+  day_of_week: number;
+  is_working: boolean;
+  start_time: string | null;
+  end_time: string | null;
+};
+
+type StaffException = {
+  date: string;
+  is_working: boolean;
+  start_time: string | null;
+  end_time: string | null;
+};
+
+// 勤務時間情報 (null = 休み)
+type WorkHours = {
+  start: string;
+  end: string;
+} | null;
+
 export default function ReserveTop() {
   const router = useRouter();
 
@@ -20,6 +40,7 @@ export default function ReserveTop() {
   const [selectedTime, setSelectedTime] = useState("");
   const [selectedCourse, setSelectedCourse] = useState(60);
   const [approvedReservations, setApprovedReservations] = useState<ApprovedReservation[]>([]);
+  const [workHours, setWorkHours] = useState<WorkHours>(null);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
 
   useEffect(() => {
@@ -35,30 +56,64 @@ export default function ReserveTop() {
 
   useEffect(() => {
     if (selectedStaff && selectedDate) {
-      loadApprovedReservations();
+      loadSlotData();
     }
   }, [selectedStaff, selectedDate]);
 
-  const loadApprovedReservations = async () => {
+  const loadSlotData = async () => {
     setIsLoadingSlots(true);
-    const { data, error } = await supabase
-      .from("reservations")
-      .select("time, course")
-      .eq("staff", selectedStaff)
-      .eq("date", selectedDate)
-      .eq("status", "approved");
+    setSelectedTime("");
 
-    if (error) {
-      console.error("予約取得エラー:", error);
+    const dayOfWeek = new Date(selectedDate).getDay();
+
+    const [reservationsResult, scheduleResult, exceptionResult] = await Promise.all([
+      supabase
+        .from("reservations")
+        .select("time, course")
+        .eq("staff", selectedStaff)
+        .eq("date", selectedDate)
+        .eq("status", "approved"),
+      supabase
+        .from("staff_schedules")
+        .select("day_of_week, is_working, start_time, end_time")
+        .eq("staff", selectedStaff)
+        .eq("day_of_week", dayOfWeek)
+        .single(),
+      supabase
+        .from("staff_exceptions")
+        .select("date, is_working, start_time, end_time")
+        .eq("staff", selectedStaff)
+        .eq("date", selectedDate)
+        .maybeSingle(),
+    ]);
+
+    setApprovedReservations((reservationsResult.data as ApprovedReservation[]) || []);
+
+    // 例外設定があればそちらを優先、なければ基本スケジュールを使用
+    const exception = exceptionResult.data as StaffException | null;
+    const schedule = scheduleResult.data as StaffSchedule | null;
+
+    if (exception) {
+      setWorkHours(
+        exception.is_working && exception.start_time && exception.end_time
+          ? { start: exception.start_time.slice(0, 5), end: exception.end_time.slice(0, 5) }
+          : null
+      );
+    } else if (schedule) {
+      setWorkHours(
+        schedule.is_working && schedule.start_time && schedule.end_time
+          ? { start: schedule.start_time.slice(0, 5), end: schedule.end_time.slice(0, 5) }
+          : null
+      );
+    } else {
+      setWorkHours(null);
     }
 
-    setApprovedReservations((data as ApprovedReservation[]) || []);
     setIsLoadingSlots(false);
   };
 
   const parseTime = (timeStr: string): number => {
-    const timePart = timeStr.split(":").slice(0, 2);
-    const [hours, minutes] = timePart.map(Number);
+    const [hours, minutes] = timeStr.split(":").slice(0, 2).map(Number);
     return hours * 60 + minutes;
   };
 
@@ -66,27 +121,30 @@ export default function ReserveTop() {
     const slotStart = parseTime(slotTime);
     const slotEnd = slotStart + selectedCourse;
 
-    const hasConflict = approvedReservations.some((reservation) => {
+    return approvedReservations.some((reservation) => {
       const resStart = parseTime(reservation.time);
-      const resCourse = Number(reservation.course);
-      const resEnd = resStart + resCourse;
-
-      // 重複判定を修正：区間が重なる場合のみtrue
-      // [slotStart, slotEnd) と [resStart, resEnd) が重なるか
-      const conflict = slotStart < resEnd && slotEnd > resStart;
-
-      return conflict;
+      const resEnd = resStart + Number(reservation.course);
+      return slotStart < resEnd && slotEnd > resStart;
     });
-
-    return hasConflict;
   };
 
-  const allSlots = Array.from({ length: (23 - 10) * 2 }, (_, i) => {
-    const hour = 10 + Math.floor(i / 2);
-    return `${hour}:${i % 2 === 0 ? "00" : "30"}`;
-  });
+  const availableSlots = (() => {
+    if (!workHours) return [];
 
-  const availableSlots = allSlots.filter((slot) => !isTimeConflict(slot));
+    const workStart = parseTime(workHours.start);
+    const workEnd = parseTime(workHours.end);
+
+    // 勤務開始〜勤務終了まで30分刻みで生成
+    // コース終了時刻が勤務終了時刻を超えないスロットのみ
+    const slots: string[] = [];
+    for (let t = workStart; t + selectedCourse <= workEnd; t += 30) {
+      const hour = Math.floor(t / 60);
+      const min = t % 60;
+      slots.push(`${hour}:${min === 0 ? "00" : "30"}`);
+    }
+
+    return slots.filter((slot) => !isTimeConflict(slot));
+  })();
 
   return (
     <main className="min-h-screen bg-navy relative">
@@ -95,7 +153,7 @@ export default function ReserveTop() {
       <div className="relative z-10 max-w-2xl mx-auto p-6 py-12">
         <div className="mb-8 flex items-center justify-between">
           <h1 className="text-4xl font-heading text-beige tracking-wider">RESERVE</h1>
-          <Link 
+          <Link
             href="/"
             className="text-beige/60 hover:text-beige transition text-sm"
           >
@@ -114,7 +172,7 @@ export default function ReserveTop() {
                 setSelectedStaff(e.target.value);
                 setSelectedTime("");
               }}
-              className="w-full bg-navy/50 text-beige border border-beige/20 p-4 rounded-lg 
+              className="w-full bg-navy/50 text-beige border border-beige/20 p-4 rounded-lg
                 focus:outline-none focus:ring-2 focus:ring-bronze transition"
             >
               {staffList.map((name) => (
@@ -166,7 +224,7 @@ export default function ReserveTop() {
                 setSelectedCourse(Number(e.target.value));
                 setSelectedTime("");
               }}
-              className="w-full bg-navy/50 text-beige border border-beige/20 p-4 rounded-lg 
+              className="w-full bg-navy/50 text-beige border border-beige/20 p-4 rounded-lg
                 focus:outline-none focus:ring-2 focus:ring-bronze transition"
             >
               <option value={60}>60分</option>
@@ -185,31 +243,41 @@ export default function ReserveTop() {
               <div className="text-center text-beige/60 py-8">
                 <p className="text-sm">空き状況を確認中...</p>
               </div>
+            ) : workHours === null ? (
+              <div className="text-center text-beige/60 py-8">
+                <p className="text-sm">この日はお休みです</p>
+                <p className="text-xs mt-2">別の日付をお選びください</p>
+              </div>
             ) : availableSlots.length === 0 ? (
               <div className="text-center text-beige/60 py-8">
                 <p className="text-sm">この日は予約が埋まっています</p>
                 <p className="text-xs mt-2">別の日付をお選びください</p>
               </div>
             ) : (
-              <div className="grid grid-cols-4 gap-3">
-                {availableSlots.map((time) => {
-                  const selected = selectedTime === time;
-                  return (
-                    <button
-                      key={time}
-                      onClick={() => setSelectedTime(time)}
-                      className={`py-3 rounded-lg text-sm border-2 transition-all font-medium
-                        ${
-                          selected
-                            ? "bg-bronze text-navy border-bronze font-bold scale-105 shadow-lg shadow-bronze/30"
-                            : "bg-navy/50 text-beige/60 border-beige/20 hover:border-bronze/50 hover:text-beige"
-                        }`}
-                    >
-                      {time}
-                    </button>
-                  );
-                })}
-              </div>
+              <>
+                <p className="text-xs text-beige/40 mb-3">
+                  勤務時間: {workHours.start} 〜 {workHours.end}
+                </p>
+                <div className="grid grid-cols-4 gap-3">
+                  {availableSlots.map((time) => {
+                    const selected = selectedTime === time;
+                    return (
+                      <button
+                        key={time}
+                        onClick={() => setSelectedTime(time)}
+                        className={`py-3 rounded-lg text-sm border-2 transition-all font-medium
+                          ${
+                            selected
+                              ? "bg-bronze text-navy border-bronze font-bold scale-105 shadow-lg shadow-bronze/30"
+                              : "bg-navy/50 text-beige/60 border-beige/20 hover:border-bronze/50 hover:text-beige"
+                          }`}
+                      >
+                        {time}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </div>
 
