@@ -128,22 +128,21 @@ export default function ReserveTop() {
     });
   };
 
-  const availableSlots = (() => {
+  // 勤務時間内の全スロット（空き・予約済み両方）を生成
+  const allWorkingSlots = (() => {
     if (!workHours) return [];
 
     const workStart = parseTime(workHours.start);
     const workEnd = parseTime(workHours.end);
 
-    // 勤務開始〜勤務終了まで30分刻みで生成
-    // コース終了時刻が勤務終了時刻を超えないスロットのみ
-    const slots: string[] = [];
+    const slots: { time: string; available: boolean }[] = [];
     for (let t = workStart; t + selectedCourse <= workEnd; t += 30) {
       const hour = Math.floor(t / 60);
       const min = t % 60;
-      slots.push(`${hour}:${min === 0 ? "00" : "30"}`);
+      const time = `${hour}:${min === 0 ? "00" : "30"}`;
+      slots.push({ time, available: !isTimeConflict(time) });
     }
-
-    return slots.filter((slot) => !isTimeConflict(slot));
+    return slots;
   })();
 
   return (
@@ -248,7 +247,7 @@ export default function ReserveTop() {
                 <p className="text-sm">この日はお休みです</p>
                 <p className="text-xs mt-2">別の日付をお選びください</p>
               </div>
-            ) : availableSlots.length === 0 ? (
+            ) : allWorkingSlots.length === 0 || allWorkingSlots.every((s) => !s.available) ? (
               <div className="text-center text-beige/60 py-8">
                 <p className="text-sm">この日は予約が埋まっています</p>
                 <p className="text-xs mt-2">別の日付をお選びください</p>
@@ -259,17 +258,20 @@ export default function ReserveTop() {
                   勤務時間: {workHours.start} 〜 {workHours.end}
                 </p>
                 <div className="grid grid-cols-4 gap-3">
-                  {availableSlots.map((time) => {
+                  {allWorkingSlots.map(({ time, available }) => {
                     const selected = selectedTime === time;
                     return (
                       <button
                         key={time}
-                        onClick={() => setSelectedTime(time)}
+                        disabled={!available}
+                        onClick={() => available && setSelectedTime(time)}
                         className={`py-3 rounded-lg text-sm border-2 transition-all font-medium
                           ${
                             selected
                               ? "bg-bronze text-navy border-bronze font-bold scale-105 shadow-lg shadow-bronze/30"
-                              : "bg-navy/50 text-beige/60 border-beige/20 hover:border-bronze/50 hover:text-beige"
+                              : available
+                              ? "bg-navy/50 text-beige/60 border-beige/20 hover:border-bronze/50 hover:text-beige"
+                              : "bg-navy/20 text-beige/20 border-beige/10 cursor-not-allowed line-through"
                           }`}
                       >
                         {time}
