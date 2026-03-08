@@ -24,6 +24,19 @@ export default function ReservationList() {
   const [loading, setLoading] = useState(true);
   const [showPendingOnly, setShowPendingOnly] = useState(false);
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/login");
+        return;
+      }
+      setIsCheckingAuth(false);
+    };
+    checkAuth();
+  }, [router]);
 
   const loadReservations = async () => {
     setLoading(true);
@@ -37,8 +50,10 @@ export default function ReservationList() {
   };
 
   useEffect(() => {
-    loadReservations();
-  }, []);
+    if (!isCheckingAuth) {
+      loadReservations();
+    }
+  }, [isCheckingAuth]);
 
   const approveReservation = async (reservation: Reservation) => {
     try {
@@ -96,6 +111,14 @@ export default function ReservationList() {
   const filteredReservations = showPendingOnly
     ? reservations.filter((r) => r.status === "pending")
     : reservations;
+
+  if (isCheckingAuth) {
+    return (
+      <main className="min-h-screen bg-navy flex items-center justify-center">
+        <div className="text-beige/60 text-lg">認証確認中...</div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-navy relative">
