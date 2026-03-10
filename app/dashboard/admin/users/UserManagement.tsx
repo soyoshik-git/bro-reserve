@@ -10,6 +10,7 @@ type User = {
   role: "admin" | "staff";
   name: string;
   staffName: string;
+  isBookable: boolean;
   createdAt: string;
 };
 
@@ -18,12 +19,13 @@ type EditForm = {
   role: "admin" | "staff";
   name: string;
   staffName: string;
+  isBookable: boolean;
   password: string;
   passwordConfirm: string;
 };
 
 const emptyEdit = (): EditForm => ({
-  email: "", role: "staff", name: "", staffName: "", password: "", passwordConfirm: "",
+  email: "", role: "staff", name: "", staffName: "", isBookable: false, password: "", passwordConfirm: "",
 });
 
 const inputCls = `w-full bg-navy/50 border border-beige/20 rounded-lg px-4 py-3 text-beige
@@ -39,7 +41,7 @@ export default function UserManagement() {
   // 新規作成フォーム
   const [showForm, setShowForm] = useState(false);
   const [newForm, setNewForm] = useState({
-    email: "", password: "", role: "staff" as "staff" | "admin", name: "", staffName: "",
+    email: "", password: "", role: "staff" as "staff" | "admin", name: "", staffName: "", isBookable: false,
   });
   const [creating, setCreating] = useState(false);
 
@@ -117,13 +119,14 @@ export default function UserManagement() {
       body: JSON.stringify({
         email: newForm.email, password: newForm.password,
         role: newForm.role, name: newForm.name, staffName: newForm.staffName,
+        isBookable: newForm.isBookable,
       }),
     });
     const json = await res.json();
     setCreating(false);
     if (res.ok) {
       showToast("ユーザーを作成しました");
-      setNewForm({ email: "", password: "", role: "staff", name: "", staffName: "" });
+      setNewForm({ email: "", password: "", role: "staff", name: "", staffName: "", isBookable: false });
       setShowForm(false);
       loadUsers(token);
     } else {
@@ -136,7 +139,7 @@ export default function UserManagement() {
     setEditTarget(u);
     setEditForm({
       email: u.email, role: u.role, name: u.name,
-      staffName: u.staffName, password: "", passwordConfirm: "",
+      staffName: u.staffName, isBookable: u.isBookable, password: "", passwordConfirm: "",
     });
     setOpenMenuId(null);
   };
@@ -168,6 +171,7 @@ export default function UserManagement() {
         role: editForm.role,
         name: editForm.name,
         staffName: editForm.staffName,
+        isBookable: editForm.isBookable,
       }),
     });
     if (!patchRes.ok) {
@@ -300,6 +304,20 @@ export default function UserManagement() {
                     ))}
                   </div>
                 </div>
+
+                {/* 予約可能スタッフ */}
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                  <div
+                    onClick={() => setEditForm((f) => ({ ...f, isBookable: !f.isBookable }))}
+                    className={`w-11 h-6 rounded-full transition-colors relative
+                      ${editForm.isBookable ? "bg-bronze" : "bg-navy/60 border border-beige/20"}`}
+                  >
+                    <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-beige shadow transition-transform
+                      ${editForm.isBookable ? "translate-x-5" : "translate-x-0.5"}`} />
+                  </div>
+                  <span className="text-sm text-beige/80 font-bold">予約可能スタッフ</span>
+                  <span className="text-xs text-beige/40">（ONにすると予約フォームに表示）</span>
+                </label>
 
                 {/* パスワード（任意） */}
                 <div className="pt-2 border-t border-beige/10">
@@ -434,6 +452,18 @@ export default function UserManagement() {
               ))}
             </div>
           </div>
+          <label className="flex items-center gap-3 mb-4 cursor-pointer select-none">
+            <div
+              onClick={() => setNewForm((f) => ({ ...f, isBookable: !f.isBookable }))}
+              className={`w-11 h-6 rounded-full transition-colors relative
+                ${newForm.isBookable ? "bg-bronze" : "bg-navy/60 border border-beige/20"}`}
+            >
+              <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-beige shadow transition-transform
+                ${newForm.isBookable ? "translate-x-5" : "translate-x-0.5"}`} />
+            </div>
+            <span className="text-sm text-beige/80 font-bold">予約可能スタッフ</span>
+            <span className="text-xs text-beige/40">（ONにすると予約フォームに表示）</span>
+          </label>
           <div className="flex gap-3">
             <button
               type="submit" disabled={creating}
@@ -481,12 +511,20 @@ export default function UserManagement() {
                   </td>
                   <td className="py-4 px-4 text-xs text-beige/60 hidden sm:table-cell">{u.email}</td>
                   <td className="py-4 px-4">
-                    <span className={`inline-block text-xs font-bold px-2 py-1 rounded-md
-                      ${u.role === "admin"
-                        ? "bg-bronze/20 text-bronze"
-                        : "bg-navy/50 text-beige/60"}`}>
-                      {u.role === "admin" ? "管理者" : "スタッフ"}
-                    </span>
+                    <div className="flex flex-col gap-1">
+                      <span className={`inline-block text-xs font-bold px-2 py-1 rounded-md w-fit
+                        ${u.role === "admin"
+                          ? "bg-bronze/20 text-bronze"
+                          : "bg-navy/50 text-beige/60"}`}>
+                        {u.role === "admin" ? "管理者" : "スタッフ"}
+                      </span>
+                      {u.isBookable && (
+                        <span className="inline-block text-xs px-2 py-0.5 rounded-md w-fit
+                          bg-green-500/15 text-green-400">
+                          予約可
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="py-4 px-3 text-right">
                     {/* 三点メニュー */}

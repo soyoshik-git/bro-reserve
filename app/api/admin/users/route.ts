@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
     role: u.user_metadata?.role ?? "staff",
     name: u.user_metadata?.name ?? "",
     staffName: u.user_metadata?.staff_name ?? "",
+    isBookable: u.user_metadata?.is_bookable ?? false,
     createdAt: u.created_at,
   }));
 
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
   if (!(await verifyAdmin(req))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  const { email, password, role, name, staffName } = await req.json();
+  const { email, password, role, name, staffName, isBookable } = await req.json();
   if (!email || !password) {
     return NextResponse.json({ error: "email と password は必須です" }, { status: 400 });
   }
@@ -56,7 +57,12 @@ export async function POST(req: NextRequest) {
   const { data, error } = await admin.auth.admin.createUser({
     email,
     password,
-    user_metadata: { role: role ?? "staff", name: name ?? "", staff_name: staffName ?? "" },
+    user_metadata: {
+      role: role ?? "staff",
+      name: name ?? "",
+      staff_name: staffName ?? "",
+      is_bookable: isBookable ?? false,
+    },
     email_confirm: true,
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -68,7 +74,7 @@ export async function PATCH(req: NextRequest) {
   if (!(await verifyAdmin(req))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  const { id, role, name, staffName, email } = await req.json();
+  const { id, role, name, staffName, email, isBookable } = await req.json();
   if (!id) return NextResponse.json({ error: "id は必須です" }, { status: 400 });
 
   const admin = getAdminClient();
@@ -84,6 +90,7 @@ export async function PATCH(req: NextRequest) {
       ...(role !== undefined && { role }),
       ...(name !== undefined && { name }),
       ...(staffName !== undefined && { staff_name: staffName }),
+      ...(isBookable !== undefined && { is_bookable: isBookable }),
     },
   };
   if (email !== undefined) updatePayload.email = email;
