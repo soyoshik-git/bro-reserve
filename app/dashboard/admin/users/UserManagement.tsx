@@ -8,8 +8,26 @@ type User = {
   id: string;
   email: string;
   role: "admin" | "staff";
+  name: string;
+  staffName: string;
   createdAt: string;
 };
+
+type EditForm = {
+  email: string;
+  role: "admin" | "staff";
+  name: string;
+  staffName: string;
+  password: string;
+  passwordConfirm: string;
+};
+
+const emptyEdit = (): EditForm => ({
+  email: "", role: "staff", name: "", staffName: "", password: "", passwordConfirm: "",
+});
+
+const inputCls = `w-full bg-navy/50 border border-beige/20 rounded-lg px-4 py-3 text-beige
+  placeholder-beige/30 focus:outline-none focus:ring-2 focus:ring-bronze text-sm`;
 
 export default function UserManagement() {
   const router = useRouter();
@@ -20,16 +38,15 @@ export default function UserManagement() {
 
   // 新規作成フォーム
   const [showForm, setShowForm] = useState(false);
-  const [newEmail, setNewEmail] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [newRole, setNewRole] = useState<"staff" | "admin">("staff");
+  const [newForm, setNewForm] = useState({
+    email: "", password: "", role: "staff" as "staff" | "admin", name: "", staffName: "",
+  });
   const [creating, setCreating] = useState(false);
 
-  // パスワード変更モーダル
-  const [pwModal, setPwModal] = useState<{ id: string; email: string } | null>(null);
-  const [newPw, setNewPw] = useState("");
-  const [newPwConfirm, setNewPwConfirm] = useState("");
-  const [changingPw, setChangingPw] = useState(false);
+  // 編集モーダル
+  const [editTarget, setEditTarget] = useState<User | null>(null);
+  const [editForm, setEditForm] = useState<EditForm>(emptyEdit());
+  const [saving, setSaving] = useState(false);
 
   // 行メニュー
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -48,10 +65,10 @@ export default function UserManagement() {
   // 行メニュー外クリックで閉じる
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
-      const isInsideAny = Object.values(menuRefs.current).some(
+      const isInside = Object.values(menuRefs.current).some(
         (el) => el && el.contains(e.target as Node)
       );
-      if (!isInsideAny) setOpenMenuId(null);
+      if (!isInside) setOpenMenuId(null);
     };
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
@@ -71,12 +88,15 @@ export default function UserManagement() {
     checkAuth();
   }, [router]);
 
+  const authHeaders = (tok: string) => ({
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${tok}`,
+  });
+
   // ユーザー一覧取得
   const loadUsers = async (tok: string) => {
     setLoading(true);
-    const res = await fetch("/api/admin/users", {
-      headers: { Authorization: `Bearer ${tok}` },
-    });
+    const res = await fetch("/api/admin/users", { headers: { Authorization: `Bearer ${tok}` } });
     const json = await res.json();
     if (res.ok) setUsers(json.users);
     else showToast(json.error ?? "取得に失敗しました", "error");
@@ -87,95 +107,106 @@ export default function UserManagement() {
     if (!isCheckingAuth && token) loadUsers(token);
   }, [isCheckingAuth, token]);
 
-  // ユーザー作成
+  // 新規作成
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
     const res = await fetch("/api/admin/users", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ email: newEmail, password: newPassword, role: newRole }),
+      headers: authHeaders(token),
+      body: JSON.stringify({
+        email: newForm.email, password: newForm.password,
+        role: newForm.role, name: newForm.name, staffName: newForm.staffName,
+      }),
     });
     const json = await res.json();
     setCreating(false);
     if (res.ok) {
       showToast("ユーザーを作成しました");
-      setNewEmail(""); setNewPassword(""); setNewRole("staff"); setShowForm(false);
+      setNewForm({ email: "", password: "", role: "staff", name: "", staffName: "" });
+      setShowForm(false);
       loadUsers(token);
     } else {
       showToast(json.error ?? "作成に失敗しました", "error");
     }
   };
 
-  // ロール変更
-  const handleRoleChange = async (id: string, role: "staff" | "admin") => {
-    const res = await fetch("/api/admin/users", {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ id, role }),
+  // 編集モーダルを開く
+  const openEdit = (u: User) => {
+    setEditTarget(u);
+    setEditForm({
+      email: u.email, role: u.role, name: u.name,
+      staffName: u.staffName, password: "", passwordConfirm: "",
     });
-    const json = await res.json();
-    if (res.ok) {
-      showToast("ロールを変更しました");
-      loadUsers(token);
-    } else {
-      showToast(json.error ?? "変更に失敗しました", "error");
-    }
+    setOpenMenuId(null);
   };
 
-  // パスワード変更
-  const handlePasswordChange = async (e: React.FormEvent) => {
+  // 編集保存
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pwModal) return;
-    if (newPw !== newPwConfirm) {
-      showToast("パスワードが一致しません", "error");
-      return;
+    if (!editTarget) return;
+
+    // パスワード入力されていれば検証
+    if (editForm.password) {
+      if (editForm.password.length < 8) {
+        showToast("パスワードは8文字以上にしてください", "error"); return;
+      }
+      if (editForm.password !== editForm.passwordConfirm) {
+        showToast("パスワードが一致しません", "error"); return;
+      }
     }
-    setChangingPw(true);
-    const res = await fetch("/api/admin/users", {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ id: pwModal.id, password: newPw }),
+
+    setSaving(true);
+
+    // プロフィール（PATCH）
+    const patchRes = await fetch("/api/admin/users", {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify({
+        id: editTarget.id,
+        email: editForm.email,
+        role: editForm.role,
+        name: editForm.name,
+        staffName: editForm.staffName,
+      }),
     });
-    const json = await res.json();
-    setChangingPw(false);
-    if (res.ok) {
-      showToast("パスワードを変更しました");
-      setPwModal(null);
-      setNewPw("");
-      setNewPwConfirm("");
-    } else {
-      showToast(json.error ?? "変更に失敗しました", "error");
+    if (!patchRes.ok) {
+      const json = await patchRes.json();
+      showToast(json.error ?? "更新に失敗しました", "error");
+      setSaving(false); return;
     }
+
+    // パスワード変更（入力があれば PUT）
+    if (editForm.password) {
+      const putRes = await fetch("/api/admin/users", {
+        method: "PUT",
+        headers: authHeaders(token),
+        body: JSON.stringify({ id: editTarget.id, password: editForm.password }),
+      });
+      if (!putRes.ok) {
+        const json = await putRes.json();
+        showToast(json.error ?? "パスワード変更に失敗しました", "error");
+        setSaving(false); return;
+      }
+    }
+
+    setSaving(false);
+    showToast("変更を保存しました");
+    setEditTarget(null);
+    loadUsers(token);
   };
 
-  // ユーザー削除
+  // 削除
   const handleDelete = async (id: string, email: string) => {
     if (!confirm(`「${email}」を削除しますか？この操作は取り消せません。`)) return;
     const res = await fetch("/api/admin/users", {
       method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: authHeaders(token),
       body: JSON.stringify({ id }),
     });
     const json = await res.json();
-    if (res.ok) {
-      showToast("ユーザーを削除しました");
-      loadUsers(token);
-    } else {
-      showToast(json.error ?? "削除に失敗しました", "error");
-    }
+    if (res.ok) { showToast("ユーザーを削除しました"); loadUsers(token); }
+    else showToast(json.error ?? "削除に失敗しました", "error");
   };
 
   if (isCheckingAuth) {
@@ -186,8 +217,11 @@ export default function UserManagement() {
     );
   }
 
+  const pwMismatch = !!editForm.passwordConfirm && editForm.password !== editForm.passwordConfirm;
+
   return (
     <div className="max-w-4xl mx-auto p-6">
+
       {/* トースト */}
       {toast && (
         <div className={`fixed top-16 left-1/2 -translate-x-1/2 z-[100] px-5 py-3
@@ -195,87 +229,127 @@ export default function UserManagement() {
           animate-fade-in border
           ${toast.type === "success"
             ? "bg-charcoal border-bronze/40 text-beige"
-            : "bg-red-900/80 border-red-500/40 text-red-200"
-          }`}>
+            : "bg-red-900/80 border-red-500/40 text-red-200"}`}>
           {toast.msg}
         </div>
       )}
 
-      {/* パスワード変更モーダル */}
-      {pwModal && (
+      {/* 編集モーダル */}
+      {editTarget && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-          {/* オーバーレイ */}
           <div
             className="absolute inset-0 bg-navy/80 backdrop-blur-sm"
-            onClick={() => { setPwModal(null); setNewPw(""); setNewPwConfirm(""); }}
+            onClick={() => setEditTarget(null)}
           />
-          {/* モーダル本体 */}
           <form
-            onSubmit={handlePasswordChange}
-            className="relative z-10 w-full max-w-sm bg-charcoal border border-bronze/30
-              rounded-2xl p-6 shadow-2xl shadow-navy/60"
+            onSubmit={handleSave}
+            className="relative z-10 w-full max-w-md bg-charcoal border border-bronze/30
+              rounded-2xl shadow-2xl shadow-navy/60 overflow-y-auto max-h-[90vh]"
           >
-            <h2 className="text-lg font-heading text-beige tracking-wide mb-1">
-              パスワード変更
-            </h2>
-            <p className="text-xs text-beige/50 mb-5">{pwModal.email}</p>
+            <div className="p-6">
+              <h2 className="text-lg font-heading text-beige tracking-wide mb-5">ユーザー編集</h2>
 
-            <div className="space-y-4 mb-6">
-              <div>
-                <label className="block text-xs text-beige/60 mb-1 font-bold">新しいパスワード</label>
-                <input
-                  type="password"
-                  required
-                  minLength={8}
-                  value={newPw}
-                  onChange={(e) => setNewPw(e.target.value)}
-                  placeholder="8文字以上"
-                  className="w-full bg-navy/50 border border-beige/20 rounded-lg px-4 py-3 text-beige
-                    placeholder-beige/30 focus:outline-none focus:ring-2 focus:ring-bronze text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-beige/60 mb-1 font-bold">確認（再入力）</label>
-                <input
-                  type="password"
-                  required
-                  minLength={8}
-                  value={newPwConfirm}
-                  onChange={(e) => setNewPwConfirm(e.target.value)}
-                  placeholder="同じパスワードをもう一度"
-                  className={`w-full bg-navy/50 border rounded-lg px-4 py-3 text-beige
-                    placeholder-beige/30 focus:outline-none focus:ring-2 text-sm
-                    ${newPwConfirm && newPw !== newPwConfirm
-                      ? "border-red-500/50 focus:ring-red-500/50"
-                      : "border-beige/20 focus:ring-bronze"
-                    }`}
-                />
-                {newPwConfirm && newPw !== newPwConfirm && (
-                  <p className="text-xs text-red-400 mt-1">パスワードが一致しません</p>
-                )}
-              </div>
-            </div>
+              <div className="space-y-4">
+                {/* メールアドレス */}
+                <div>
+                  <label className="block text-xs text-beige/60 mb-1 font-bold">メールアドレス</label>
+                  <input
+                    type="email" required value={editForm.email}
+                    onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
+                    className={inputCls}
+                  />
+                </div>
 
-            <div className="flex gap-3">
-              <button
-                type="submit"
-                disabled={changingPw || !newPw || newPw !== newPwConfirm}
-                className={`flex-1 py-2.5 rounded-lg font-bold text-sm transition-all
-                  ${changingPw || !newPw || newPw !== newPwConfirm
-                    ? "bg-navy/30 text-beige/30 cursor-not-allowed"
-                    : "bg-beige text-navy hover:bg-bronze hover:scale-105"
-                  }`}
-              >
-                {changingPw ? "変更中..." : "変更する"}
-              </button>
-              <button
-                type="button"
-                onClick={() => { setPwModal(null); setNewPw(""); setNewPwConfirm(""); }}
-                className="flex-1 py-2.5 rounded-lg border-2 border-beige/20 text-beige/60
-                  font-bold text-sm hover:border-beige/50 transition-all"
-              >
-                キャンセル
-              </button>
+                {/* 本名 */}
+                <div>
+                  <label className="block text-xs text-beige/60 mb-1 font-bold">本名</label>
+                  <input
+                    type="text" value={editForm.name} placeholder="山田 太郎"
+                    onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                    className={inputCls}
+                  />
+                </div>
+
+                {/* スタッフ名（源氏名） */}
+                <div>
+                  <label className="block text-xs text-beige/60 mb-1 font-bold">
+                    スタッフ名 <span className="text-beige/40 font-normal">（予約フォームに表示される名前）</span>
+                  </label>
+                  <input
+                    type="text" required value={editForm.staffName} placeholder="Koshi"
+                    onChange={(e) => setEditForm((f) => ({ ...f, staffName: e.target.value }))}
+                    className={inputCls}
+                  />
+                </div>
+
+                {/* ロール */}
+                <div>
+                  <label className="block text-xs text-beige/60 mb-2 font-bold">ロール</label>
+                  <div className="flex gap-3">
+                    {(["staff", "admin"] as const).map((r) => (
+                      <button
+                        key={r} type="button"
+                        onClick={() => setEditForm((f) => ({ ...f, role: r }))}
+                        className={`px-4 py-2 rounded-lg border-2 text-sm font-bold transition-all
+                          ${editForm.role === r
+                            ? "bg-bronze text-navy border-bronze"
+                            : "bg-navy/30 text-beige/60 border-beige/20 hover:border-bronze/50"}`}
+                      >
+                        {r === "admin" ? "管理者" : "スタッフ"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* パスワード（任意） */}
+                <div className="pt-2 border-t border-beige/10">
+                  <p className="text-xs text-beige/40 mb-3">パスワード変更（変更しない場合は空欄）</p>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-beige/60 mb-1 font-bold">新しいパスワード</label>
+                      <input
+                        type="password" minLength={8} value={editForm.password}
+                        placeholder="8文字以上"
+                        onChange={(e) => setEditForm((f) => ({ ...f, password: e.target.value }))}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-beige/60 mb-1 font-bold">確認（再入力）</label>
+                      <input
+                        type="password" minLength={8} value={editForm.passwordConfirm}
+                        placeholder="同じパスワードをもう一度"
+                        onChange={(e) => setEditForm((f) => ({ ...f, passwordConfirm: e.target.value }))}
+                        className={`${inputCls} ${pwMismatch ? "border-red-500/50 focus:ring-red-500/50" : ""}`}
+                      />
+                      {pwMismatch && (
+                        <p className="text-xs text-red-400 mt-1">パスワードが一致しません</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="submit"
+                  disabled={saving || pwMismatch}
+                  className={`flex-1 py-2.5 rounded-lg font-bold text-sm transition-all
+                    ${saving || pwMismatch
+                      ? "bg-navy/30 text-beige/30 cursor-not-allowed"
+                      : "bg-beige text-navy hover:bg-bronze hover:scale-105"}`}
+                >
+                  {saving ? "保存中..." : "保存"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditTarget(null)}
+                  className="flex-1 py-2.5 rounded-lg border-2 border-beige/20 text-beige/60
+                    font-bold text-sm hover:border-beige/50 transition-all"
+                >
+                  キャンセル
+                </button>
+              </div>
             </div>
           </form>
         </div>
@@ -307,26 +381,39 @@ export default function UserManagement() {
             <div>
               <label className="block text-xs text-beige/60 mb-1 font-bold">メールアドレス</label>
               <input
-                type="email"
-                required
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
+                type="email" required value={newForm.email}
+                onChange={(e) => setNewForm((f) => ({ ...f, email: e.target.value }))}
                 placeholder="staff@example.com"
-                className="w-full bg-navy/50 border border-beige/20 rounded-lg px-4 py-3 text-beige
-                  placeholder-beige/30 focus:outline-none focus:ring-2 focus:ring-bronze text-sm"
+                className={inputCls}
               />
             </div>
             <div>
               <label className="block text-xs text-beige/60 mb-1 font-bold">パスワード</label>
               <input
-                type="password"
-                required
-                minLength={8}
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
+                type="password" required minLength={8} value={newForm.password}
+                onChange={(e) => setNewForm((f) => ({ ...f, password: e.target.value }))}
                 placeholder="8文字以上"
-                className="w-full bg-navy/50 border border-beige/20 rounded-lg px-4 py-3 text-beige
-                  placeholder-beige/30 focus:outline-none focus:ring-2 focus:ring-bronze text-sm"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-beige/60 mb-1 font-bold">本名</label>
+              <input
+                type="text" value={newForm.name}
+                onChange={(e) => setNewForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="山田 太郎"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-beige/60 mb-1 font-bold">
+                スタッフ名 <span className="text-beige/40 font-normal">（予約フォームに表示）</span>
+              </label>
+              <input
+                type="text" required value={newForm.staffName}
+                onChange={(e) => setNewForm((f) => ({ ...f, staffName: e.target.value }))}
+                placeholder="Koshi"
+                className={inputCls}
               />
             </div>
           </div>
@@ -335,14 +422,12 @@ export default function UserManagement() {
             <div className="flex gap-3">
               {(["staff", "admin"] as const).map((r) => (
                 <button
-                  key={r}
-                  type="button"
-                  onClick={() => setNewRole(r)}
+                  key={r} type="button"
+                  onClick={() => setNewForm((f) => ({ ...f, role: r }))}
                   className={`px-4 py-2 rounded-lg border-2 text-sm font-bold transition-all
-                    ${newRole === r
+                    ${newForm.role === r
                       ? "bg-bronze text-navy border-bronze"
-                      : "bg-navy/30 text-beige/60 border-beige/20 hover:border-bronze/50"
-                    }`}
+                      : "bg-navy/30 text-beige/60 border-beige/20 hover:border-bronze/50"}`}
                 >
                   {r === "admin" ? "管理者" : "スタッフ"}
                 </button>
@@ -351,19 +436,16 @@ export default function UserManagement() {
           </div>
           <div className="flex gap-3">
             <button
-              type="submit"
-              disabled={creating}
+              type="submit" disabled={creating}
               className={`px-6 py-2.5 rounded-lg font-bold text-sm transition-all
                 ${creating
                   ? "bg-navy/30 text-beige/30 cursor-not-allowed"
-                  : "bg-beige text-navy hover:bg-bronze hover:scale-105"
-                }`}
+                  : "bg-beige text-navy hover:bg-bronze hover:scale-105"}`}
             >
               {creating ? "作成中..." : "作成"}
             </button>
             <button
-              type="button"
-              onClick={() => setShowForm(false)}
+              type="button" onClick={() => setShowForm(false)}
               className="px-6 py-2.5 rounded-lg border-2 border-beige/20 text-beige/60
                 font-bold text-sm hover:border-beige/50 transition-all"
             >
@@ -375,18 +457,16 @@ export default function UserManagement() {
 
       {/* ユーザー一覧 */}
       {loading ? (
-        <div className="text-center text-beige/60 py-20">
-          <p>読み込み中...</p>
-        </div>
+        <div className="text-center text-beige/60 py-20">読み込み中...</div>
       ) : (
         <div className="bg-charcoal/50 rounded-xl border border-bronze/20 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-navy/50 text-beige/80 font-bold border-b border-bronze/20">
               <tr>
-                <th className="py-4 px-4 text-left">メールアドレス</th>
+                <th className="py-4 px-4 text-left">スタッフ名</th>
+                <th className="py-4 px-4 text-left hidden sm:table-cell">メール</th>
                 <th className="py-4 px-4 text-left">ロール</th>
-                <th className="py-4 px-4 text-left hidden sm:table-cell">作成日</th>
-                <th className="py-4 px-4 text-right">操作</th>
+                <th className="py-4 px-3 text-right w-12"></th>
               </tr>
             </thead>
             <tbody>
@@ -395,60 +475,48 @@ export default function UserManagement() {
                   key={u.id}
                   className="border-b border-bronze/10 hover:bg-navy/30 transition text-beige/80"
                 >
-                  <td className="py-4 px-4 font-medium">{u.email}</td>
                   <td className="py-4 px-4">
-                    <select
-                      value={u.role}
-                      onChange={(e) => handleRoleChange(u.id, e.target.value as "staff" | "admin")}
-                      className="bg-navy/50 border border-beige/20 rounded-lg px-3 py-1.5
-                        text-xs font-bold text-beige focus:outline-none focus:ring-2 focus:ring-bronze
-                        cursor-pointer"
-                    >
-                      <option value="staff">スタッフ</option>
-                      <option value="admin">管理者</option>
-                    </select>
+                    <p className="font-bold text-beige">{u.staffName || <span className="text-beige/30">未設定</span>}</p>
+                    {u.name && <p className="text-xs text-beige/40 mt-0.5">{u.name}</p>}
                   </td>
-                  <td className="py-4 px-4 text-xs text-beige/50 hidden sm:table-cell">
-                    {new Date(u.createdAt).toLocaleDateString("ja-JP")}
+                  <td className="py-4 px-4 text-xs text-beige/60 hidden sm:table-cell">{u.email}</td>
+                  <td className="py-4 px-4">
+                    <span className={`inline-block text-xs font-bold px-2 py-1 rounded-md
+                      ${u.role === "admin"
+                        ? "bg-bronze/20 text-bronze"
+                        : "bg-navy/50 text-beige/60"}`}>
+                      {u.role === "admin" ? "管理者" : "スタッフ"}
+                    </span>
                   </td>
-                  <td className="py-4 px-4 text-right">
+                  <td className="py-4 px-3 text-right">
+                    {/* 三点メニュー */}
                     <div
                       className="relative inline-block"
                       ref={(el) => { menuRefs.current[u.id] = el; }}
                     >
-                      {/* 三点メニューボタン */}
                       <button
                         onClick={() => setOpenMenuId(openMenuId === u.id ? null : u.id)}
                         className="w-8 h-8 flex items-center justify-center rounded-lg
                           text-beige/40 hover:text-beige hover:bg-navy/50 transition-all"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                          <circle cx="12" cy="5" r="1.5" />
-                          <circle cx="12" cy="12" r="1.5" />
-                          <circle cx="12" cy="19" r="1.5" />
+                          <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
                         </svg>
                       </button>
 
-                      {/* ドロップダウン */}
                       {openMenuId === u.id && (
-                        <div className="absolute right-0 mt-1 w-36 bg-charcoal border border-bronze/20
+                        /* right-0 だとモバイルで切れるので、テーブル右端に固定 */
+                        <div className="absolute right-0 bottom-full mb-1 w-28 bg-charcoal border border-bronze/20
                           rounded-xl shadow-2xl shadow-navy/60 overflow-hidden z-50">
                           <button
-                            onClick={() => {
-                              setPwModal({ id: u.id, email: u.email });
-                              setNewPw(""); setNewPwConfirm("");
-                              setOpenMenuId(null);
-                            }}
+                            onClick={() => openEdit(u)}
                             className="w-full text-left px-4 py-3 text-sm text-beige/80
                               hover:bg-navy/50 transition-colors"
                           >
-                            パスワード変更
+                            編集
                           </button>
                           <button
-                            onClick={() => {
-                              setOpenMenuId(null);
-                              handleDelete(u.id, u.email ?? "");
-                            }}
+                            onClick={() => { setOpenMenuId(null); handleDelete(u.id, u.email); }}
                             className="w-full text-left px-4 py-3 text-sm text-red-400
                               hover:bg-red-500/10 transition-colors"
                           >
@@ -463,9 +531,7 @@ export default function UserManagement() {
             </tbody>
           </table>
           {users.length === 0 && (
-            <div className="text-center py-12 text-beige/40">
-              ユーザーがいません
-            </div>
+            <div className="text-center py-12 text-beige/40">ユーザーがいません</div>
           )}
         </div>
       )}

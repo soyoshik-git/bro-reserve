@@ -24,6 +24,7 @@ export default function ReservationList() {
   const [showPendingOnly, setShowPendingOnly] = useState(false);
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -32,6 +33,7 @@ export default function ReservationList() {
         router.push("/login");
         return;
       }
+      setIsAdmin(session.user.user_metadata?.role === "admin");
       setIsCheckingAuth(false);
     };
     checkAuth();
@@ -197,8 +199,14 @@ export default function ReservationList() {
 
               <div className="space-y-2 mb-4 text-beige/80 text-sm">
                 <p><span className="text-beige/50">名前:</span> {r.name}</p>
-                <p><span className="text-beige/50">電話:</span> {r.tel}</p>
-                <p><span className="text-beige/50">メール:</span> {r.email}</p>
+                {isAdmin ? (
+                  <>
+                    <p><span className="text-beige/50">電話:</span> {r.tel}</p>
+                    <p><span className="text-beige/50">メール:</span> {r.email}</p>
+                  </>
+                ) : (
+                  <p className="text-beige/30 text-xs">連絡先は管理者のみ表示</p>
+                )}
                 <p><span className="text-beige/50">コース:</span> {r.course}分</p>
                 {r.note && (
                   <p className="text-xs text-beige/60 mt-2 p-2 bg-navy/30 rounded">
@@ -242,7 +250,7 @@ export default function ReservationList() {
                 <th className="py-4 px-4 text-left">日時</th>
                 <th className="py-4 px-4 text-left">スタッフ</th>
                 <th className="py-4 px-4 text-left">名前</th>
-                <th className="py-4 px-4 text-left">連絡先</th>
+                {isAdmin && <th className="py-4 px-4 text-left">連絡先</th>}
                 <th className="py-4 px-4 text-left">コース</th>
                 <th className="py-4 px-4 text-left">状態</th>
                 <th className="py-4 px-4 text-right">操作</th>
@@ -261,10 +269,12 @@ export default function ReservationList() {
                   </td>
                   <td className="py-4 px-4 font-heading text-beige">{r.staff}</td>
                   <td className="py-4 px-4">{r.name}</td>
-                  <td className="py-4 px-4 text-xs">
-                    {r.tel}<br />
-                    <span className="text-beige/50">{r.email}</span>
-                  </td>
+                  {isAdmin && (
+                    <td className="py-4 px-4 text-xs">
+                      {r.tel}<br />
+                      <span className="text-beige/50">{r.email}</span>
+                    </td>
+                  )}
                   <td className="py-4 px-4">{r.course}分</td>
                   <td className="py-4 px-4">
                     <span
