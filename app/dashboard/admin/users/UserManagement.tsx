@@ -25,6 +25,12 @@ export default function UserManagement() {
   const [newRole, setNewRole] = useState<"staff" | "admin">("staff");
   const [creating, setCreating] = useState(false);
 
+  // パスワード変更モーダル
+  const [pwModal, setPwModal] = useState<{ id: string; email: string } | null>(null);
+  const [newPw, setNewPw] = useState("");
+  const [newPwConfirm, setNewPwConfirm] = useState("");
+  const [changingPw, setChangingPw] = useState(false);
+
   // トースト
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -107,6 +113,35 @@ export default function UserManagement() {
     }
   };
 
+  // パスワード変更
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pwModal) return;
+    if (newPw !== newPwConfirm) {
+      showToast("パスワードが一致しません", "error");
+      return;
+    }
+    setChangingPw(true);
+    const res = await fetch("/api/admin/users", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ id: pwModal.id, password: newPw }),
+    });
+    const json = await res.json();
+    setChangingPw(false);
+    if (res.ok) {
+      showToast("パスワードを変更しました");
+      setPwModal(null);
+      setNewPw("");
+      setNewPwConfirm("");
+    } else {
+      showToast(json.error ?? "変更に失敗しました", "error");
+    }
+  };
+
   // ユーザー削除
   const handleDelete = async (id: string, email: string) => {
     if (!confirm(`「${email}」を削除しますか？この操作は取り消せません。`)) return;
@@ -147,6 +182,86 @@ export default function UserManagement() {
             : "bg-red-900/80 border-red-500/40 text-red-200"
           }`}>
           {toast.msg}
+        </div>
+      )}
+
+      {/* パスワード変更モーダル */}
+      {pwModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          {/* オーバーレイ */}
+          <div
+            className="absolute inset-0 bg-navy/80 backdrop-blur-sm"
+            onClick={() => { setPwModal(null); setNewPw(""); setNewPwConfirm(""); }}
+          />
+          {/* モーダル本体 */}
+          <form
+            onSubmit={handlePasswordChange}
+            className="relative z-10 w-full max-w-sm bg-charcoal border border-bronze/30
+              rounded-2xl p-6 shadow-2xl shadow-navy/60"
+          >
+            <h2 className="text-lg font-heading text-beige tracking-wide mb-1">
+              パスワード変更
+            </h2>
+            <p className="text-xs text-beige/50 mb-5">{pwModal.email}</p>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-xs text-beige/60 mb-1 font-bold">新しいパスワード</label>
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  value={newPw}
+                  onChange={(e) => setNewPw(e.target.value)}
+                  placeholder="8文字以上"
+                  className="w-full bg-navy/50 border border-beige/20 rounded-lg px-4 py-3 text-beige
+                    placeholder-beige/30 focus:outline-none focus:ring-2 focus:ring-bronze text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-beige/60 mb-1 font-bold">確認（再入力）</label>
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  value={newPwConfirm}
+                  onChange={(e) => setNewPwConfirm(e.target.value)}
+                  placeholder="同じパスワードをもう一度"
+                  className={`w-full bg-navy/50 border rounded-lg px-4 py-3 text-beige
+                    placeholder-beige/30 focus:outline-none focus:ring-2 text-sm
+                    ${newPwConfirm && newPw !== newPwConfirm
+                      ? "border-red-500/50 focus:ring-red-500/50"
+                      : "border-beige/20 focus:ring-bronze"
+                    }`}
+                />
+                {newPwConfirm && newPw !== newPwConfirm && (
+                  <p className="text-xs text-red-400 mt-1">パスワードが一致しません</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="submit"
+                disabled={changingPw || !newPw || newPw !== newPwConfirm}
+                className={`flex-1 py-2.5 rounded-lg font-bold text-sm transition-all
+                  ${changingPw || !newPw || newPw !== newPwConfirm
+                    ? "bg-navy/30 text-beige/30 cursor-not-allowed"
+                    : "bg-beige text-navy hover:bg-bronze hover:scale-105"
+                  }`}
+              >
+                {changingPw ? "変更中..." : "変更する"}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setPwModal(null); setNewPw(""); setNewPwConfirm(""); }}
+                className="flex-1 py-2.5 rounded-lg border-2 border-beige/20 text-beige/60
+                  font-bold text-sm hover:border-beige/50 transition-all"
+              >
+                キャンセル
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
@@ -280,7 +395,13 @@ export default function UserManagement() {
                   <td className="py-4 px-4 text-xs text-beige/50 hidden sm:table-cell">
                     {new Date(u.createdAt).toLocaleDateString("ja-JP")}
                   </td>
-                  <td className="py-4 px-4 text-right">
+                  <td className="py-4 px-4 text-right whitespace-nowrap">
+                    <button
+                      onClick={() => { setPwModal({ id: u.id, email: u.email }); setNewPw(""); setNewPwConfirm(""); }}
+                      className="text-beige/50 hover:text-beige transition font-bold text-xs mr-4"
+                    >
+                      PW変更
+                    </button>
                     <button
                       onClick={() => handleDelete(u.id, u.email ?? "")}
                       className="text-red-400/60 hover:text-red-300 transition font-bold text-xs"

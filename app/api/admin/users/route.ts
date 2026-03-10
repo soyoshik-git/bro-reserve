@@ -89,6 +89,27 @@ export async function PATCH(req: NextRequest) {
   return NextResponse.json({ ok: true });
 }
 
+// PUT: パスワード変更
+export async function PUT(req: NextRequest) {
+  if (!(await verifyAdmin(req))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { id, password } = await req.json();
+  if (!id || !password) {
+    return NextResponse.json({ error: "id と password は必須です" }, { status: 400 });
+  }
+  if (password.length < 8) {
+    return NextResponse.json({ error: "パスワードは8文字以上にしてください" }, { status: 400 });
+  }
+
+  const admin = getAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(id, { password });
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  return NextResponse.json({ ok: true });
+}
+
 // DELETE: ユーザー削除
 export async function DELETE(req: NextRequest) {
   if (!(await verifyAdmin(req))) {
