@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/utils/supabase";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 
 type Schedule = {
   id: string;
@@ -156,30 +155,19 @@ export default function SchedulePage() {
 
   if (isCheckingAuth) {
     return (
-      <main className="min-h-screen bg-navy flex items-center justify-center">
-        <div className="text-beige/60 text-lg">認証確認中...</div>
-      </main>
+      <div className="flex items-center justify-center py-20">
+        <div className="text-beige/60">認証確認中...</div>
+      </div>
     );
   }
 
   return (
-    <main className="min-h-screen bg-navy relative">
-      <div className="absolute inset-0 bg-gradient-to-br from-navy via-charcoal to-navy opacity-90" />
-
-      <div className="relative z-10 max-w-4xl mx-auto p-6 py-12">
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-heading text-beige tracking-wider mb-2">
-              SCHEDULE
-            </h1>
-            <p className="text-beige/60 text-sm">{currentStaff}の出勤スケジュール</p>
-          </div>
-          <Link 
-            href="/dashboard/reservations"
-            className="text-beige/60 hover:text-beige transition text-sm"
-          >
-            ← 予約一覧
-          </Link>
+    <div className="max-w-4xl mx-auto p-6">
+        <div className="mb-8">
+          <h1 className="text-3xl font-heading text-beige tracking-wider mb-1">
+            SCHEDULE
+          </h1>
+          <p className="text-beige/60 text-sm">{currentStaff}の出勤スケジュール</p>
         </div>
 
         {loading ? (
@@ -396,7 +384,6 @@ export default function SchedulePage() {
             </div>
           </>
         )}
-      </div>
-    </main>
+    </div>
   );
 }
