@@ -33,8 +33,8 @@ type WorkHours = {
 export default function ReserveTop() {
   const router = useRouter();
 
-  const staffList = ["Koshi", "Ryuki", "Asuka"];
-  const [selectedStaff, setSelectedStaff] = useState(staffList[0]);
+  const [staffList, setStaffList] = useState<string[]>([]);
+  const [selectedStaff, setSelectedStaff] = useState("");
   const [dates, setDates] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
@@ -42,6 +42,26 @@ export default function ReserveTop() {
   const [approvedReservations, setApprovedReservations] = useState<ApprovedReservation[]>([]);
   const [workHours, setWorkHours] = useState<WorkHours>(null);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  const [isLoadingStaff, setIsLoadingStaff] = useState(true);
+
+  // スタッフ一覧を API から取得
+  useEffect(() => {
+    const fetchStaff = async () => {
+      try {
+        const res = await fetch("/api/staff");
+        const json = await res.json();
+        if (res.ok && json.staff.length > 0) {
+          setStaffList(json.staff);
+          setSelectedStaff(json.staff[0]);
+        }
+      } catch {
+        // エラー時はスタッフなしのまま
+      } finally {
+        setIsLoadingStaff(false);
+      }
+    };
+    fetchStaff();
+  }, []);
 
   useEffect(() => {
     const today = new Date();
@@ -165,19 +185,29 @@ export default function ReserveTop() {
             <label className="block text-sm font-bold text-beige/80 mb-3 tracking-wide">
               STAFF
             </label>
-            <select
-              value={selectedStaff}
-              onChange={(e) => {
-                setSelectedStaff(e.target.value);
-                setSelectedTime("");
-              }}
-              className="w-full bg-navy/50 text-beige border border-beige/20 p-4 rounded-lg
-                focus:outline-none focus:ring-2 focus:ring-bronze transition"
-            >
-              {staffList.map((name) => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
+            {isLoadingStaff ? (
+              <div className="w-full bg-navy/50 border border-beige/20 p-4 rounded-lg text-beige/40 text-sm">
+                読み込み中...
+              </div>
+            ) : staffList.length === 0 ? (
+              <div className="w-full bg-navy/50 border border-red-500/20 p-4 rounded-lg text-red-400/70 text-sm">
+                スタッフ情報を取得できませんでした
+              </div>
+            ) : (
+              <select
+                value={selectedStaff}
+                onChange={(e) => {
+                  setSelectedStaff(e.target.value);
+                  setSelectedTime("");
+                }}
+                className="w-full bg-navy/50 text-beige border border-beige/20 p-4 rounded-lg
+                  focus:outline-none focus:ring-2 focus:ring-bronze transition"
+              >
+                {staffList.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div className="bg-charcoal/50 border border-bronze/20 rounded-xl p-6 backdrop-blur">
