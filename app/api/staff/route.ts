@@ -14,6 +14,7 @@ export async function GET() {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const staffNames = data.users
+    .filter((u) => u.user_metadata?.is_bookable === true)
     .map((u) => {
       const staffName = u.user_metadata?.staff_name as string | undefined;
       if (staffName?.trim()) return staffName.trim();
