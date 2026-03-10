@@ -31,6 +31,10 @@ export default function UserManagement() {
   const [newPwConfirm, setNewPwConfirm] = useState("");
   const [changingPw, setChangingPw] = useState(false);
 
+  // 行メニュー
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const menuRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
   // トースト
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -40,6 +44,18 @@ export default function UserManagement() {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 3000);
   };
+
+  // 行メニュー外クリックで閉じる
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      const isInsideAny = Object.values(menuRefs.current).some(
+        (el) => el && el.contains(e.target as Node)
+      );
+      if (!isInsideAny) setOpenMenuId(null);
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   // 認証チェック
   useEffect(() => {
@@ -395,19 +411,52 @@ export default function UserManagement() {
                   <td className="py-4 px-4 text-xs text-beige/50 hidden sm:table-cell">
                     {new Date(u.createdAt).toLocaleDateString("ja-JP")}
                   </td>
-                  <td className="py-4 px-4 text-right whitespace-nowrap">
-                    <button
-                      onClick={() => { setPwModal({ id: u.id, email: u.email }); setNewPw(""); setNewPwConfirm(""); }}
-                      className="text-beige/50 hover:text-beige transition font-bold text-xs mr-4"
+                  <td className="py-4 px-4 text-right">
+                    <div
+                      className="relative inline-block"
+                      ref={(el) => { menuRefs.current[u.id] = el; }}
                     >
-                      PW変更
-                    </button>
-                    <button
-                      onClick={() => handleDelete(u.id, u.email ?? "")}
-                      className="text-red-400/60 hover:text-red-300 transition font-bold text-xs"
-                    >
-                      削除
-                    </button>
+                      {/* 三点メニューボタン */}
+                      <button
+                        onClick={() => setOpenMenuId(openMenuId === u.id ? null : u.id)}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg
+                          text-beige/40 hover:text-beige hover:bg-navy/50 transition-all"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                          <circle cx="12" cy="5" r="1.5" />
+                          <circle cx="12" cy="12" r="1.5" />
+                          <circle cx="12" cy="19" r="1.5" />
+                        </svg>
+                      </button>
+
+                      {/* ドロップダウン */}
+                      {openMenuId === u.id && (
+                        <div className="absolute right-0 mt-1 w-36 bg-charcoal border border-bronze/20
+                          rounded-xl shadow-2xl shadow-navy/60 overflow-hidden z-50">
+                          <button
+                            onClick={() => {
+                              setPwModal({ id: u.id, email: u.email });
+                              setNewPw(""); setNewPwConfirm("");
+                              setOpenMenuId(null);
+                            }}
+                            className="w-full text-left px-4 py-3 text-sm text-beige/80
+                              hover:bg-navy/50 transition-colors"
+                          >
+                            パスワード変更
+                          </button>
+                          <button
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              handleDelete(u.id, u.email ?? "");
+                            }}
+                            className="w-full text-left px-4 py-3 text-sm text-red-400
+                              hover:bg-red-500/10 transition-colors"
+                          >
+                            削除
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
